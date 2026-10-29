@@ -79,6 +79,8 @@ npm trust github @cordis-tavern/ct-host-web \
 
 复制 [`examples/publish.yml`](examples/publish.yml) 到业务仓库的 `.github/workflows/publish.yml`。
 
+16 个仓库**已全部接好**（`cordis-tavern` 用 `build-command: pnpm build:dist`，`ct-all-uninstall` 跳过安装与构建）。
+
 `permissions` 是硬要求：**调用方必须给 `id-token: write`**，否则 OIDC 拿不到令牌，报错看起来像"忘了配 NPM_TOKEN"。
 
 ## 三、日常发版
@@ -147,7 +149,19 @@ npm 对这六种原因给的是同一个错误，按顺序排查：
 - **同一个仓库里有两个会跑 `npm publish` 的工作流**：只有一个能匹配 Trusted Publisher 里填的文件名，另一个必然失败；
 - **私有仓库**：不影响发布，只影响 provenance（见上节）。
 
-## 七、本仓库自身的约定
+## 七、改完怎么验
+
+有金丝雀仓库 [`ci-workflows-smoke`](https://github.com/cordis-tavern/ci-workflows-smoke)：它调用同一条工作流，但 `dry-run: true`，**不会真的发到 npm**。
+
+```bash
+# 改完 ci-workflows 后，在金丝雀仓库推个新 tag
+git tag v0.0.3 && git push origin v0.0.3
+```
+
+绿色 = 调用 → tag 解析 → Node/npm 升版 → pnpm 安装 → 构建 → 打包 全通；红了就看 run 里断在哪一步。
+不要拿真包试错 —— 真包的版本号一旦发出去就收不回来。
+
+## 八、本仓库自身的约定
 
 - 改 `publish-npm.yml` 会在**所有仓库的下一次发版**生效（调用方用 `@main`）；要稳妥可把调用方钉到 commit SHA，那就得逐仓升级；
 - 不要在业务仓库里复制发布逻辑 —— 复制一份就有第二个"执行者"，Trusted Publisher 只能指一个。
