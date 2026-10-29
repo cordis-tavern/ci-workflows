@@ -1,0 +1,300 @@
+name: publish-npm
+
+# 可复用发布工作流：npm OIDC Trusted Publishing（无令牌、无 secret）。
+#
+# 调用方（业务仓库）最小写法：
+#
+#   jobs:
+#     npm:
+#       uses: cordis-tavern/ci-workflows/.github/workflows/publish-npm.yml@main
+#       permissions:
+#         contents: read
+#         id-token: write
+#
+# ⚠️ npm 包上的 Trusted Publisher 必须填「真正执行 npm publish 的工作流」：
+#      Repository        = cordis-tavern/ci-workflows
+#      Workflow filename = publish-npm.yml
+#    填成调用方的 publish.yml 会得到 404 / ENEEDAUTH（npm 不校验保存时的配置）。
+#
+# 触发契约：只接受 tag 触发（refs/tags/v*）。
+#   v1.2.3        + package.json 1.2.3        → dist-tag latest
+#   v1.2.3-rc.1   + package.json 1.2.3-rc.1   → dist-tag rc
+#   其它预发布后缀：-beta.* → beta，-alpha.* → alpha，其余 → next
+#
+# 硬性版本要求（本工作流会显式升级并校验）：
+#   Node >= 22.14.0，npm >= 11.5.1
+
+on:
+  workflow_call:
+    inputs:
+      package-dir:
+        description: '包目录（相对仓库根，单包仓库留空即可）'
+        type: string
+        default: '.'
+      node-version:
+        description: 'Node 版本，必须 >= 22.14.0'
+        type: string
+        default: '24'
+      npm-version:
+        description: '显式安装的 npm 版本范围，必须 >= 11.5.1'
+        type: string
+        default: '^11.5.1'
+      pnpm-version:
+        description: 'pnpm 版本；留空则读 package.json 的 packageManager 字段'
+        type: string
+        default: ''
+      install-command:
+        description: '依赖安装命令；留空跳过（无依赖的包）'
+        type: string
+        default: 'pnpm install --frozen-lockfile'
+      build-command:
+        description: '构建命令；留空跳过'
+        type: string
+        default: 'pnpm build'
+      test-command:
+        description: '测试命令；留空跳过。发布前的最后一道闸，建议逐步打开'
+        type: string
+        default: ''
+      dist-tag:
+        description: '覆盖自动推导的 npm dist-tag（latest / rc / alpha / beta / next）'
+        type: string
+        default: ''
+      access:
+        description: 'npm access，scoped 包必须是 public'
+        type: string
+        default: 'public'
+      provenance:
+        description: 'auto | true | false；auto 交给 npm 判断（私有仓不会生成 provenance）'
+        type: string
+        default: 'auto'
+      dry-run:
+        description: '只打包不发布，用于验证链路'
+        type: boolean
+        default: false
+    outputs:
+      name:
+        description: '包名'
+        value: ${{ jobs.publish.outputs.name }}
+      version:
+        description: '本次发布的版本（已去掉 v 前缀）'
+        value: ${{ jobs.publish.outputs.version }}
+      dist-tag:
+        description: '实际使用的 npm dist-tag'
+        value: ${{ jobs.publish.outputs.dist-tag }}
+      published:
+        description: 'true 表示本次真的发布了；false 表示该版本已存在而跳过'
+        value: ${{ jobs.publish.outputs.published }}
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: npm publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      id-token: write
+    concurrency:
+      group: publish-npm-${{ github.repository }}-${{ github.ref }}
+      cancel-in-progress: false
+    defaults:
+      run:
+        working-directory: ${{ inputs.package-dir }}
+    outputs:
+      name: ${{ steps.tag.outputs.name }}
+      version: ${{ steps.tag.outputs.version }}
+      dist-tag: ${{ steps.tag.outputs.dist-tag }}
+      published: ${{ steps.publisher.outputs.published }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: 解析 tag 并校验 package.json
+        id: tag
+        shell: bash
+        env:
+          INPUT_DIST_TAG_OVERRIDE: ${{ inputs.dist-tag }}
+        run: |
+          set -euo pipefail
+
+          ref="${GITHUB_REF:-}"
+          if [[ "$ref" != refs/tags/* ]]; then
+            echo "::error::publish-npm 只接受 tag 触发，当前 ref=${ref:-<空>}；请用 vX.Y.Z 打 tag 后 push tag"
+            exit 1
+          fi
+          tag="${ref#refs/tags/}"
+
+          if [[ ! "$tag" =~ ^v([0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z]+(\.[0-9A-Za-z]+)*)?)$ ]]; then
+            echo "::error::tag 格式非法：${tag}（期望 vX.Y.Z 或 vX.Y.Z-<prerelease>，例如 v1.2.3 / v1.2.3-rc.1）"
+            exit 1
+          fi
+          version="${BASH_REMATCH[1]}"
+
+          name="$(node -p "require('./package.json').name")"
+          pkg_version="$(node -p "require('./package.json').version")"
+          is_private="$(node -p "require('./package.json').private === true ? 'yes' : 'no'")"
+
+          if [[ "$is_private" == "yes" ]]; then
+            echo "::error::${name} 的 package.json 标了 private: true，不能发布"
+            exit 1
+          fi
+
+          if [[ "$pkg_version" != "$version" ]]; then
+            echo "::error::版本不一致：tag=${tag}（→ ${version}）而 package.json=${pkg_version}；先改 package.json 再打 tag"
+            exit 1
+          fi
+
+          if [[ -n "${INPUT_DIST_TAG_OVERRIDE:-}" ]]; then
+            dist_tag="$INPUT_DIST_TAG_OVERRIDE"
+          elif [[ "$version" == *-* ]]; then
+            pre="${version#*-}"
+            case "$pre" in
+              rc|rc.*)       dist_tag=rc ;;
+              beta|beta.*)   dist_tag=beta ;;
+              alpha|alpha.*) dist_tag=alpha ;;
+              *)             dist_tag=next ;;
+            esac
+          else
+            dist_tag=latest
+          fi
+
+          {
+            echo "name=${name}"
+            echo "version=${version}"
+            echo "dist-tag=${dist_tag}"
+          } >> "$GITHUB_OUTPUT"
+
+          echo "包：${name}"
+          echo "版本：${version}（tag ${tag}）"
+          echo "dist-tag：${dist_tag}"
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: ${{ inputs.node-version }}
+
+      - name: 升级 npm（OIDC 要求 >= 11.5.1）
+        run: npm install -g "npm@${{ inputs.npm-version }}"
+
+      - name: 校验 Node / npm 版本
+        shell: bash
+        run: |
+          set -euo pipefail
+          node_version="$(node --version)"
+          npm_version="$(npm --version)"
+          echo "Node ${node_version} / npm ${npm_version}"
+          node -e '
+            const [maj, min] = process.argv[1].replace(/^v/, "").split(".").map(Number)
+            const ok = maj > 22 || (maj === 22 && min >= 14)
+            if (!ok) {
+              console.error(`::error::Node ${process.argv[1]} 低于 OIDC Trusted Publishing 要求的 22.14.0`)
+              process.exit(1)
+            }
+          ' "$node_version"
+          node -e '
+            const [maj, min, patch] = process.argv[1].split(".").map(Number)
+            const ok = maj > 11 || (maj === 11 && (min > 5 || (min === 5 && patch >= 1)))
+            if (!ok) {
+              console.error(`::error::npm ${process.argv[1]} 低于 OIDC Trusted Publishing 要求的 11.5.1`)
+              process.exit(1)
+            }
+          ' "$npm_version"
+
+      - name: Setup pnpm
+        if: inputs.install-command != ''
+        uses: pnpm/action-setup@v6
+        with:
+          version: ${{ inputs.pnpm-version }}
+          package_json_file: ${{ inputs.package-dir }}/package.json
+          run_install: false
+
+      - name: 安装依赖
+        if: inputs.install-command != ''
+        shell: bash
+        run: ${{ inputs.install-command }}
+
+      - name: 构建
+        if: inputs.build-command != ''
+        shell: bash
+        run: ${{ inputs.build-command }}
+
+      - name: 测试
+        if: inputs.test-command != ''
+        shell: bash
+        run: ${{ inputs.test-command }}
+
+      - name: 发布到 npm
+        id: publisher
+        shell: bash
+        env:
+          INPUT_DIST_TAG: ${{ steps.tag.outputs.dist-tag }}
+          INPUT_ACCESS: ${{ inputs.access }}
+          INPUT_PROVENANCE: ${{ inputs.provenance }}
+          INPUT_DRY_RUN: ${{ inputs.dry-run }}
+          INPUT_VERSION: ${{ steps.tag.outputs.version }}
+          INPUT_NAME: ${{ steps.tag.outputs.name }}
+        run: |
+          set -euo pipefail
+
+          name="$INPUT_NAME"
+          version="$INPUT_VERSION"
+
+          # 幂等：tag 重推 / 重跑时不因「版本已存在」变红
+          if npm view "${name}@${version}" version >/dev/null 2>&1; then
+            echo "::notice::${name}@${version} 已存在于 registry，跳过发布"
+            echo "published=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # 关键：NODE_AUTH_TOKEN / NPM_TOKEN 即使是空字符串也会让 npm 走 token 分支而非 OIDC
+          unset NODE_AUTH_TOKEN NPM_TOKEN
+
+          # setup-node 的 registry-url 会往 .npmrc 写 _authToken=${NODE_AUTH_TOKEN}；
+          # 该行存在时 npm 会拿空 token 去认证，同样压掉 OIDC。
+          if [[ -f .npmrc ]]; then
+            sed -i -E \
+              -e '/^[[:space:]]*(\/\/[^[:space:]]*:)?_authToken[[:space:]]*=/d' \
+              -e '/^[[:space:]]*_auth[[:space:]]*=/d' \
+              -e '/^[[:space:]]*always-auth[[:space:]]*=/d' \
+              .npmrc
+            echo "已清理 .npmrc 中的 token 认证行"
+          fi
+
+          args=(--tag "$INPUT_DIST_TAG" --access "$INPUT_ACCESS")
+          case "$INPUT_PROVENANCE" in
+            true)  args+=(--provenance) ;;
+            false) args+=(--no-provenance) ;;
+          esac
+          if [[ "$INPUT_DRY_RUN" == "true" ]]; then
+            args+=(--dry-run)
+          fi
+
+          echo "npm publish ${args[*]}"
+          npm publish "${args[@]}"
+
+          echo "published=$([[ "$INPUT_DRY_RUN" == "true" ]] && echo false || echo true)" >> "$GITHUB_OUTPUT"
+
+      - name: 结果摘要
+        if: always()
+        shell: bash
+        env:
+          INPUT_NAME: ${{ steps.tag.outputs.name }}
+          INPUT_VERSION: ${{ steps.tag.outputs.version }}
+          INPUT_DIST_TAG: ${{ steps.tag.outputs.dist-tag }}
+          INPUT_PUBLISHED: ${{ steps.publisher.outputs.published }}
+        run: |
+          {
+            echo "### npm publish"
+            echo ""
+            echo "| 项 | 值 |"
+            echo "| --- | --- |"
+            echo "| 包 | \`${INPUT_NAME:-?}\` |"
+            echo "| 版本 | \`${INPUT_VERSION:-?}\` |"
+            echo "| dist-tag | \`${INPUT_DIST_TAG:-?}\` |"
+            echo "| 已发布 | ${INPUT_PUBLISHED:-unknown} |"
+            echo "| 触发 ref | \`${GITHUB_REF}\` |"
+          } >> "$GITHUB_STEP_SUMMARY"

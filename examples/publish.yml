@@ -1,0 +1,25 @@
+# npm 发布：push `vX.Y.Z` / `vX.Y.Z-rc.N` 触发。
+# 真正的发布逻辑在中央仓库 cordis-tavern/ci-workflows，见其 README。
+name: publish
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+# 调用方必须给 id-token: write，否则 OIDC 拿不到令牌（报错会伪装成 ENEEDAUTH）。
+permissions:
+  contents: read
+
+jobs:
+  npm:
+    name: publish to npm
+    uses: cordis-tavern/ci-workflows/.github/workflows/publish-npm.yml@main
+    permissions:
+      contents: read
+      id-token: write
+    # 按需覆盖；默认值见 ci-workflows/README.md「可调输入」
+    # with:
+    #   package-dir: '.'
+    #   build-command: pnpm build
+    #   test-command: pnpm test

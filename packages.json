@@ -1,0 +1,24 @@
+{
+  "workflow": {
+    "repository": "cordis-tavern/ci-workflows",
+    "file": "publish-npm.yml"
+  },
+  "packages": [
+    { "repo": "cordis-tavern", "name": "@cordis-tavern/cordis-tavern" },
+    { "repo": "build-tsdown", "name": "@cordis-tavern/build-tsdown" },
+    { "repo": "ct-all-uninstall", "name": "@cordis-tavern/ct-all-uninstall" },
+    { "repo": "ct-client-cordis", "name": "@cordis-tavern/ct-client-cordis" },
+    { "repo": "ct-client-found", "name": "@cordis-tavern/ct-client-found" },
+    { "repo": "ct-event-scope", "name": "@cordis-tavern/ct-event-scope" },
+    { "repo": "ct-frontend-static", "name": "@cordis-tavern/ct-frontend-static" },
+    { "repo": "ct-host-web", "name": "@cordis-tavern/ct-host-web" },
+    { "repo": "ct-index-renderer", "name": "@cordis-tavern/ct-index-renderer" },
+    { "repo": "ct-log-router", "name": "@cordis-tavern/ct-log-router" },
+    { "repo": "ct-persist", "name": "@cordis-tavern/ct-persist" },
+    { "repo": "ct-ui-kit", "name": "@cordis-tavern/ct-ui-kit", "published": false },
+    { "repo": "ct-ui-layout", "name": "@cordis-tavern/ct-ui-layout" },
+    { "repo": "ct-ui-renderer", "name": "@cordis-tavern/ct-ui-renderer" },
+    { "repo": "ct-ui-slots", "name": "@cordis-tavern/ct-ui-slots" },
+    { "repo": "ct-ui-theme", "name": "@cordis-tavern/ct-ui-theme" }
+  ]
+}
