@@ -23,8 +23,17 @@ npm registry（dist-tag: latest / rc / alpha / beta / next）
 | --- | --- |
 | 可复用工作流 `publish-npm.yml` | ✅ 已上线；金丝雀 `ci-workflows-smoke` 两次 run 全绿（tag 解析 / Node·npm 升版 / pnpm 安装 / 构建 / 打包） |
 | 16 个业务仓库的 `publish.yml` | ✅ 已接入并推送 |
-| 16 个包的 Trusted Publisher | ⏳ **待网页配置**（见第二节）—— 配完 CI 才能真发布 |
-| `@cordis-tavern/ct-ui-kit` 首版 | ⏳ `0.0.1-alpha.1` 已 staged，需在 npmjs.com approve |
+| 16 个包的 Trusted Publisher | ✅ 已配（值 = 本包仓库 / `publish.yml`，见第二节） |
+| `@cordis-tavern/ct-ui-kit` 首版 | ✅ `0.0.1-alpha.1` 已上线 |
+
+真实发布已验证（2026-10-30）：
+
+| 包 | tag | 结果 |
+| --- | --- | --- |
+| `@cordis-tavern/ct-host-web` | `v0.1.0-rc.4` | `rc=0.1.0-rc.4`，`latest` 仍为 `0.1.0-rc.2` |
+| `@cordis-tavern/ct-ui-kit` | `v0.0.1-alpha.2` | `alpha=0.0.1-alpha.2`，`latest` 仍为 `0.0.1-alpha.1` |
+
+两条都是 OIDC 换 token、无任何 secret；`latest` 没被预发布顶掉，说明 dist-tag 路由正确。
 
 ## 一、发布规则
 
