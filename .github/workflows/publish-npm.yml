@@ -11,10 +11,14 @@ name: publish-npm
 #         contents: read
 #         id-token: write
 #
-# ⚠️ npm 包上的 Trusted Publisher 必须填「真正执行 npm publish 的工作流」：
-#      Repository        = cordis-tavern/ci-workflows
-#      Workflow filename = publish-npm.yml
-#    填成调用方的 publish.yml 会得到 404 / ENEEDAUTH（npm 不校验保存时的配置）。
+# ⚠️ npm 侧 Trusted Publisher 填的是「调用方」，不是本文件。
+#    npm 官方文档原话：workflow_call 时
+#    "validation checks the calling workflow's name instead of the workflow
+#     that actually contains the publish command"（trusted-publishers "Troubleshooting"）。
+#    所以每个包都填自己的仓库 + 统一的调用方文件名：
+#      Repository        = 本包所在的仓库，例如 cordis-tavern/ct-host-web
+#      Workflow filename = publish.yml
+#    填成 ci-workflows / publish-npm.yml 一定 ENEEDAUTH。
 #
 # 触发契约：只接受 tag 触发（refs/tags/v*）。
 #   v1.2.3        + package.json 1.2.3        → dist-tag latest
@@ -229,6 +233,28 @@ jobs:
         shell: bash
         working-directory: ${{ inputs.package-dir }}
         run: ${{ inputs.test-command }}
+
+      - name: OIDC 声明（诊断）
+        shell: bash
+        working-directory: ${{ inputs.package-dir }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" || -z "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}" ]]; then
+            echo "::error::拿不到 OIDC 请求地址：这个 job 没有 id-token: write"
+            exit 1
+          fi
+          curl -sS -H "Authorization: Bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
+            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=npm:registry.npmjs.org" \
+          | node -e '
+              const fs = require("fs")
+              const { value } = JSON.parse(fs.readFileSync(0, "utf8"))
+              if (!value) { console.error("::error::registry 没有返回 id_token"); process.exit(1) }
+              const p = JSON.parse(Buffer.from(value.split(".")[1], "base64url").toString())
+              console.log("repository       :", p.repository)
+              console.log("workflow_ref     :", p.workflow_ref)
+              console.log("job_workflow_ref :", p.job_workflow_ref)
+              console.log("environment      :", p.environment ?? "(none)")
+            '
 
       - name: 发布到 npm
         id: publisher

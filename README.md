@@ -52,7 +52,13 @@ npm registry（dist-tag: latest / rc / alpha / beta / next）
 
 ### 2. 给每个 npm 包配置 Trusted Publisher
 
-> ⚠️ **最容易错的一步。** OIDC 令牌标识的是**真正执行 `npm publish` 的工作流**（`job_workflow_ref`），也就是本仓库的 `publish-npm.yml`，**不是**业务仓库里那个只负责调用的 `publish.yml`。填错了 npm 只会给 `404` / `ENEEDAUTH`，不会告诉你哪里错。
+> ⚠️ **最容易错的一步，而且我第一版写反了。** 走 `workflow_call` 时，npm 校验的是**调用方**工作流，不是真正执行 `npm publish` 的那个文件。npm 官方文档原话：
+>
+> > Some GitHub Actions workflows use `workflow_call` to invoke other workflows that run `npm publish` … When this happens, **validation checks the calling workflow's name instead of the workflow that actually contains the publish command**. The `id-token: write` permission must also be given to both parent and child workflows.
+>
+> 原因是 OIDC 令牌里 `repository` / `workflow_ref` 记的是**入口仓库**，被调用文件只出现在 `job_workflow_ref` 里，而 npm 匹配的是前者（[npm 想让 npm 改查 `job_workflow_ref`，至今未采纳](https://github.com/npm/documentation/issues/1755)）。
+>
+> 所以填成 `ci-workflows / publish-npm.yml` 一定 `ENEEDAUTH` —— 这正是 2026-10-30 那次 `ct-host-web@0.1.0-rc.3` 失败的原因。
 
 每个包在 npmjs.com → *Package settings → Trusted publishing* 填：
 
@@ -60,10 +66,12 @@ npm registry（dist-tag: latest / rc / alpha / beta / next）
 | --- | --- |
 | Publisher | GitHub Actions |
 | Organization or user | `cordis-tavern` |
-| Repository | `ci-workflows` |
-| Workflow filename | `publish-npm.yml` |
+| Repository | **本包自己的仓库**，例如 `ct-host-web`（填在 `cordis-tavern` 下） |
+| Workflow filename | **`publish.yml`**（所有调用方统一用这个名字，所以每包只差 Repository 一个字段） |
 | Environment name | **留空** |
 | Allowed actions | 勾选 **npm publish** |
+
+> 每个包只能配一个 trusted publisher，且它绑定的是"哪个仓库的哪个入口文件"，所以 Repository 天然一包一个。统一的是**文件名**，不是仓库。
 
 批量配置（推荐，省掉 16 次手点）：
 
@@ -77,8 +85,8 @@ node scripts/setup-trust.mjs --dry-run   # 先看要发哪些请求
 
 ```bash
 npm trust github @cordis-tavern/ct-host-web \
-  --repo cordis-tavern/ci-workflows \
-  --file publish-npm.yml \
+  --repo cordis-tavern/ct-host-web \
+  --file publish.yml \
   --allow-publish -y
 ```
 

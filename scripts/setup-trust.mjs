@@ -22,9 +22,9 @@ const dryRun = args.includes('--dry-run')
 const onlyIndex = args.indexOf('--only')
 const only = onlyIndex === -1 ? null : args[onlyIndex + 1]
 
-const { repository, file } = config.workflow
-if (!repository || !file) {
-  console.error('packages.json 缺少 workflow.repository / workflow.file')
+const { org, file } = config.workflow
+if (!org || !file) {
+  console.error('packages.json 缺少 workflow.org / workflow.file')
   process.exit(1)
 }
 
@@ -34,7 +34,7 @@ if (targets.length === 0) {
   process.exit(1)
 }
 
-console.log(`工作流：${repository} / ${file}`)
+console.log(`工作流：<${org}/本包仓库> / ${file}`)
 console.log(`目标：${targets.length} 个包${dryRun ? '（dry-run，不写配置）' : ''}\n`)
 
 const failed = []
@@ -44,6 +44,7 @@ for (const pkg of targets) {
     failed.push({ name: pkg.name, reason: 'not published yet' })
     continue
   }
+  const repository = `${org}/${pkg.repo}`
   const cmd = [
     'trust', 'github', pkg.name,
     '--repo', repository,
@@ -53,7 +54,7 @@ for (const pkg of targets) {
   ]
   if (dryRun) cmd.push('--dry-run')
 
-  console.log(`▶ ${pkg.name}`)
+  console.log(`▶ ${pkg.name}  ← ${repository}/${file}`)
   const res = spawnSync('npm', cmd, {
     stdio: 'inherit',
     shell: process.platform === 'win32',
