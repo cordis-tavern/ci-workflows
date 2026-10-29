@@ -9,7 +9,7 @@
     { "repo": "ct-all-uninstall", "name": "@cordis-tavern/ct-all-uninstall" },
     { "repo": "ct-client-cordis", "name": "@cordis-tavern/ct-client-cordis" },
     { "repo": "ct-client-found", "name": "@cordis-tavern/ct-client-found" },
-    { "repo": "ct-event-scope", "name": "@cordis-tavern/ct-event-scope" },
+    { "repo": "ct-event-scops", "name": "@cordis-tavern/ct-event-scope" },
     { "repo": "ct-frontend-static", "name": "@cordis-tavern/ct-frontend-static" },
     { "repo": "ct-host-web", "name": "@cordis-tavern/ct-host-web" },
     { "repo": "ct-index-renderer", "name": "@cordis-tavern/ct-index-renderer" },
