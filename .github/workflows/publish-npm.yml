@@ -99,9 +99,6 @@ jobs:
     concurrency:
       group: publish-npm-${{ github.repository }}-${{ github.ref }}
       cancel-in-progress: false
-    defaults:
-      run:
-        working-directory: ${{ inputs.package-dir }}
     outputs:
       name: ${{ steps.tag.outputs.name }}
       version: ${{ steps.tag.outputs.version }}
@@ -116,6 +113,7 @@ jobs:
       - name: 解析 tag 并校验 package.json
         id: tag
         shell: bash
+        working-directory: ${{ inputs.package-dir }}
         env:
           INPUT_DIST_TAG_OVERRIDE: ${{ inputs.dist-tag }}
         run: |
@@ -178,10 +176,12 @@ jobs:
           node-version: ${{ inputs.node-version }}
 
       - name: 升级 npm（OIDC 要求 >= 11.5.1）
+        working-directory: ${{ inputs.package-dir }}
         run: npm install -g "npm@${{ inputs.npm-version }}"
 
       - name: 校验 Node / npm 版本
         shell: bash
+        working-directory: ${{ inputs.package-dir }}
         run: |
           set -euo pipefail
           node_version="$(node --version)"
@@ -215,21 +215,25 @@ jobs:
       - name: 安装依赖
         if: inputs.install-command != ''
         shell: bash
+        working-directory: ${{ inputs.package-dir }}
         run: ${{ inputs.install-command }}
 
       - name: 构建
         if: inputs.build-command != ''
         shell: bash
+        working-directory: ${{ inputs.package-dir }}
         run: ${{ inputs.build-command }}
 
       - name: 测试
         if: inputs.test-command != ''
         shell: bash
+        working-directory: ${{ inputs.package-dir }}
         run: ${{ inputs.test-command }}
 
       - name: 发布到 npm
         id: publisher
         shell: bash
+        working-directory: ${{ inputs.package-dir }}
         env:
           INPUT_DIST_TAG: ${{ steps.tag.outputs.dist-tag }}
           INPUT_ACCESS: ${{ inputs.access }}
@@ -281,6 +285,7 @@ jobs:
       - name: 结果摘要
         if: always()
         shell: bash
+        working-directory: ${{ inputs.package-dir }}
         env:
           INPUT_NAME: ${{ steps.tag.outputs.name }}
           INPUT_VERSION: ${{ steps.tag.outputs.version }}

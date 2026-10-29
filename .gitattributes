@@ -1,0 +1,2 @@
+# 工作流里含 bash 脚本，必须是 LF —— CRLF 会让 `set -euo pipefail` 变成非法命令。
+* text=auto eol=lf
