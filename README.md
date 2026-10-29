@@ -17,6 +17,15 @@ ci-workflows .github/workflows/publish-npm.yml  ← 真正执行 npm publish 的
 npm registry（dist-tag: latest / rc / alpha / beta / next）
 ```
 
+## 当前状态（2026-10-30）
+
+| 项 | 状态 |
+| --- | --- |
+| 可复用工作流 `publish-npm.yml` | ✅ 已上线；金丝雀 `ci-workflows-smoke` 两次 run 全绿（tag 解析 / Node·npm 升版 / pnpm 安装 / 构建 / 打包） |
+| 16 个业务仓库的 `publish.yml` | ✅ 已接入并推送 |
+| 16 个包的 Trusted Publisher | ⏳ **待网页配置**（见第二节）—— 配完 CI 才能真发布 |
+| `@cordis-tavern/ct-ui-kit` 首版 | ⏳ `0.0.1-alpha.1` 已 staged，需在 npmjs.com approve |
+
 ## 一、发布规则
 
 | 场景 | Git tag | `package.json` `version` | npm dist-tag |
@@ -73,7 +82,19 @@ npm trust github @cordis-tavern/ct-host-web \
   --allow-publish -y
 ```
 
-**尚未发布过的包**（当前是 `@cordis-tavern/ct-ui-kit`）无法配置 Trusted Publisher —— npm 的信任配置挂在已存在的包上。先手工 `npm publish --access public` 一次，再补配置，之后全部交给 CI。
+**尚未发布过的包**（`@cordis-tavern/ct-ui-kit`）无法配置 Trusted Publisher —— npm 的信任配置挂在已存在的包上。先发一次，再补配置，之后全部交给 CI。
+
+⚠️ 两条 npm 侧的策略会让"用 token 手工发一次"变得比预期麻烦：
+
+- **能绕过 2FA 的 granular token 一律不能改信任配置**，接口直接 403：
+  `Granular access tokens that bypass two-factor authentication may not perform this action`。
+  这类操作只认**带 2FA 的网页会话**（或 `npm login --auth-type=web` + `--otp`）。
+- **同一类 token 的 `npm publish` 会进入 staged（暂存）状态**，要人工 approve 才真正上线；
+  approve 同样需要 2FA。表现是：`npm publish` 打印成功，但 `npm view <pkg>` 仍是 404，
+  只存在一个 `0.0.0-stage` 占位版本，重发报 `E409 Cannot publish over previously staged version`。
+
+所以：**trusted publisher 这一步请直接在 npmjs.com 网页上做**（网页会话已经过 2FA），
+或者在一个能过 2FA 的 CLI 会话里跑 `scripts/setup-trust.mjs`。
 
 ### 3. 业务仓库加调用方工作流
 
