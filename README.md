@@ -24,16 +24,14 @@ npm registry（dist-tag: latest / rc / alpha / beta / next）
 | 可复用工作流 `publish-npm.yml` | ✅ 已上线；金丝雀 `ci-workflows-smoke` 两次 run 全绿（tag 解析 / Node·npm 升版 / pnpm 安装 / 构建 / 打包） |
 | 16 个业务仓库的 `publish.yml` | ✅ 已接入并推送 |
 | 16 个包的 Trusted Publisher | ✅ 已配（值 = 本包仓库 / `publish.yml`，见第二节） |
-| `@cordis-tavern/ct-ui-kit` 首版 | ✅ `0.0.1-alpha.1` 已上线 |
 
 真实发布已验证（2026-10-30）：
 
 | 包 | tag | 结果 |
 | --- | --- | --- |
 | `@cordis-tavern/ct-host-web` | `v0.1.0-rc.4` | `rc=0.1.0-rc.4`，`latest` 仍为 `0.1.0-rc.2` |
-| `@cordis-tavern/ct-ui-kit` | `v0.0.1-alpha.2` | `alpha=0.0.1-alpha.2`，`latest` 仍为 `0.0.1-alpha.1` |
 
-两条都是 OIDC 换 token、无任何 secret；`latest` 没被预发布顶掉，说明 dist-tag 路由正确。
+这条是 OIDC 换 token、无任何 secret；`latest` 没被预发布顶掉，说明 dist-tag 路由正确。
 
 ## 一、发布规则
 
@@ -99,7 +97,7 @@ npm trust github @cordis-tavern/ct-host-web \
   --allow-publish -y
 ```
 
-**尚未发布过的包**（`@cordis-tavern/ct-ui-kit`）无法配置 Trusted Publisher —— npm 的信任配置挂在已存在的包上。先发一次，再补配置，之后全部交给 CI。
+**尚未发布过的包**无法配置 Trusted Publisher —— npm 的信任配置挂在已存在的包上。先发一次，再补配置，之后全部交给 CI。
 
 ⚠️ 两条 npm 侧的策略会让"用 token 手工发一次"变得比预期麻烦：
 
